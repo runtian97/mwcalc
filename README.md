@@ -12,7 +12,7 @@ pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu121  # f
 
 
 # Install the package
-git clone https://github.com/yourusername/mwcalc.git
+git clone https://github.com/runtian97/mwcalc.git
 cd mwcalc
 pip install .
 ```
