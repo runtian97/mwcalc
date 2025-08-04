@@ -55,10 +55,10 @@ remove_duplicates("molecules", dry_run=False)
 reorganize_output("molecules")
 
 # 4. Optimize (optional)
-optimize_folder_xyz("molecules", "/path/to/model.pt")
+optimize_folder_xyz("molecules", "esen_sm_conserving_all.pt")
 ```
 
 ### Command Line
 ```bash
-mwcalc run --target-mw molecular_weight --output-dir molecules --model-path your_fairchem_model --num-mols 2000 --tolerance 0 --random-seed 0
+mwcalc run --target-mw 472 --output-dir molecules --model-path esen_sm_conserving_all.pt --num-mols 2000 --tolerance 0 --random-seed 0
 ```
