@@ -21,13 +21,13 @@ pip install .
 
 ### Molecular weight referece
     mw_dict = {
-        'N':   14.01,
-        'NH':  14.01+1.01,
-        'NH2': 14.01+1.01*2,
-        'Si':  28.086,
-        'SiH': 28.086 + 1.01,
-        'SiH2': 28.086 + 1.01*2,
-        'SiH3': 28.086 + 1.01*3
+        'N':   14,
+        'NH':  14+1,
+        'NH2': 14+1*2,
+        'Si':  28,
+        'SiH': 28 + 1,
+        'SiH2': 28 + 1*2,
+        'SiH3': 28 + 1*3
     }
 
 ### Complete Workflow
@@ -36,7 +36,7 @@ from mwcalc import MolecularWorkflowPipeline
 
 pipeline = MolecularWorkflowPipeline()
 results = pipeline.run_complete_workflow(
-    target_mw=473.352,
+    target_mw=472,
     output_dir="molecules",
     num_mols_per_combo=2000,
     tolerance=0,
@@ -52,7 +52,7 @@ from mwcalc.optimization import optimize_folder_xyz
 
 # 1. Generate molecules
 generate_sin_only_molecules(
-    target_mw=473.352,
+    target_mw=472,
     output_dir="molecules",
     num_mols_per_combo=2000,
     tolerance=0,
@@ -71,5 +71,5 @@ optimize_folder_xyz("molecules", "esen_sm_conserving_all.pt")
 
 ### Command Line
 ```bash
-mwcalc run --target-mw 473.352 --output-dir molecules --model-path esen_sm_conserving_all.pt --num-mols 2000 --tolerance 0 --random-seed 0
+mwcalc run --target-mw 472 --output-dir molecules --model-path esen_sm_conserving_all.pt --num-mols 2000 --tolerance 0 --random-seed 0
 ```
