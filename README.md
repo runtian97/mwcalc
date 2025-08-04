@@ -25,7 +25,7 @@ from mwcalc import MolecularWorkflowPipeline
 
 pipeline = MolecularWorkflowPipeline()
 results = pipeline.run_complete_workflow(
-    target_mw=473.352,
+    target_mw=472,
     output_dir="molecules",
     num_mols_per_combo=2000,
     tolerance=0,
