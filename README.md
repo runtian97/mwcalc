@@ -19,6 +19,17 @@ pip install .
 
 ## Usage
 
+### Molecular weight referece
+    mw_dict = {
+        'N':   14.01,
+        'NH':  14.01+1.01,
+        'NH2': 14.01+1.01*2,
+        'Si':  28.086,
+        'SiH': 28.086 + 1.01,
+        'SiH2': 28.086 + 1.01*2,
+        'SiH3': 28.086 + 1.01*3
+    }
+
 ### Complete Workflow
 ```python
 from mwcalc import MolecularWorkflowPipeline
