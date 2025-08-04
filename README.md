@@ -41,7 +41,7 @@ from mwcalc.optimization import optimize_folder_xyz
 
 # 1. Generate molecules
 generate_sin_only_molecules(
-    target_mw=473.352,
+    target_mw=472,
     output_dir="molecules",
     num_mols_per_combo=2000,
     tolerance=0,
