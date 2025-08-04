@@ -83,13 +83,13 @@ def generate_sin_only_molecules(
     
     # Initialize molecular weight dictionary and bonding rules
     mw_dict = {
-        'N':   14,
-        'NH':  15,
-        'NH2': 16,
-        'Si':  28,
-        'SiH': 29,
-        'SiH2': 30,
-        'SiH3': 31
+        'N':   14.01,
+        'NH':  14.01+1.01,
+        'NH2': 14.01+1.01*2,
+        'Si':  28.086,
+        'SiH': 28.086 + 1.01,
+        'SiH2': 28.086 + 1.01*2,
+        'SiH3': 28.086 + 1.01*3
     }
     
     bonds_allowed = {
