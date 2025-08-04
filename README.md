@@ -60,5 +60,5 @@ optimize_folder_xyz("molecules", "/path/to/model.pt")
 
 ### Command Line
 ```bash
-mwcalc run --target-mw 473.352 --output-dir molecules --model-path your_fairchem_model --num-mols 2000 --tolerance 0 --random-seed 0
+mwcalc run --target-mw molecular_weight --output-dir molecules --model-path your_fairchem_model --num-mols 2000 --tolerance 0 --random-seed 0
 ```
