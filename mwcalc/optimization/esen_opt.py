@@ -55,14 +55,14 @@ def ESEN_ASE(mol_path, model_path, device="cpu", fmax=0.02, steps=500):
 
     return energy
 
-def optimize_folder_xyz(root_dir, model_path, device="cuda" if torch.cuda.is_available() else "cpu", fmax=0.02):
+def optimize_folder_xyz(root_dir, model_path, device="cuda" if torch.cuda.is_available() else "cpu", fmax=0.02, steps=500):
     records = []
     for dp, _, files in os.walk(root_dir):
         for fn in files:
             if fn.lower().endswith(".xyz"):
                 path = os.path.join(dp, fn)
                 try:
-                    e = ESEN_ASE(path, model_path, device=device, fmax=fmax)
+                    e = ESEN_ASE(path, model_path, device=device, fmax=fmax, steps=steps)
                     rel = os.path.relpath(path, root_dir)
                     records.append((rel, e))
                 except Exception as exc:
