@@ -10,7 +10,7 @@ import torch
 
 EV_TO_KCAL = 23.0605
 
-def ESEN_ASE(mol_path, model_path, device="cpu", fmax=0.02):
+def ESEN_ASE(mol_path, model_path, device="cpu", fmax=0.02, steps=500):
     # 1) Load geometry
     mol_atoms = read(mol_path)
 
@@ -28,7 +28,7 @@ def ESEN_ASE(mol_path, model_path, device="cpu", fmax=0.02):
     base = os.path.splitext(os.path.basename(mol_path))[0]
     traj = f"esen_{base}_opt.traj"
     log  = f"{base}.log"
-    LBFGS(mol_atoms, trajectory=traj, logfile=log).run(fmax=fmax)
+    LBFGS(mol_atoms, trajectory=traj, logfile=log).run(fmax=fmax, steps=steps)
 
     # 5) Extract energy & force
     energy = mol_atoms.get_potential_energy()
