@@ -66,7 +66,7 @@ remove_duplicates("molecules", dry_run=False)
 reorganize_output("molecules")
 
 # 4. Optimize (optional)
-optimize_folder_xyz("molecules", "esen_sm_conserving_all.pt")
+optimize_folder_xyz("molecules", "esen_sm_conserving_all.pt", fmax=0.02, steps=500)
 ```
 
 ### Command Line
