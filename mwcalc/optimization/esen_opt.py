@@ -91,4 +91,4 @@ if __name__ == "__main__":
     ROOT_FOLDER = "/Users/nickgao/Desktop/pythonProject/Merck/Mw_calculator/generated_molecules_473_copy"
     MODEL_FILE  = "/Users/nickgao/Desktop/pythonProject/FAIRchem/esen_sm_conserving_all.pt"
 
-    optimize_folder_xyz(ROOT_FOLDER, MODEL_FILE, device="cpu", fmax=0.02)
+    optimize_folder_xyz(ROOT_FOLDER, MODEL_FILE, device="cuda" if torch.cuda.is_available() else "cpu", fmax=0.02)
