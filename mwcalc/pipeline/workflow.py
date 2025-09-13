@@ -9,7 +9,17 @@ from ..optimization import optimize_folder_xyz
 
 class MolecularWorkflowPipeline:
     def __init__(self, config_path: Optional[str] = None):
-        self.config = {'generation': {'tolerance': 2.0, 'num_mols_per_combo': 1000, 'validate_final': True, 'random_seed': None, 'verbose': True}, 'processing': {'dry_run': False}}
+        self.config = {
+            'generation': {
+                'tolerance': 2.0, 
+                'num_mols_per_combo': 1000, 
+                'min_distance_threshold': 0.4,  # NEW: minimum distance between atoms
+                'validate_final': True, 
+                'random_seed': None, 
+                'verbose': True
+            }, 
+            'processing': {'dry_run': False}
+        }
     
     def run_generation(self, target_mw: float, output_dir: str, **kwargs) -> Dict[str, Any]:
         print("="*60 + "\nSTEP 1: MOLECULAR GENERATION\n" + "="*60)
@@ -19,6 +29,9 @@ class MolecularWorkflowPipeline:
         stats = generate_sin_only_molecules(target_mw=target_mw, output_dir=output_dir, **gen_params)
         stats['generation_time'] = time.time() - start_time
         print(f"\n✅ Generation completed in {stats['generation_time']:.1f} seconds")
+        # Show superposition failures if any occurred
+        if stats.get('superposition_failures', 0) > 0:
+            print(f"Note: {stats['superposition_failures']} molecules rejected due to atomic superposition")
         return stats
     
     def run_deduplication(self, output_dir: str, **kwargs) -> Dict[str, Any]:
@@ -76,6 +89,8 @@ def main():
     run_parser.add_argument('--num-mols', type=int, default=1000)
     run_parser.add_argument('--tolerance', type=float, default=2.0)
     run_parser.add_argument('--random-seed', type=int)
+    run_parser.add_argument('--min-distance', type=float, default=0.4, 
+                          help='Minimum distance between atoms in Angstroms (default: 0.4)')
     
     args = parser.parse_args()
     if not args.command:
@@ -87,6 +102,7 @@ def main():
         kwargs = {}
         if hasattr(args, 'num_mols'): kwargs['num_mols_per_combo'] = args.num_mols
         if hasattr(args, 'tolerance'): kwargs['tolerance'] = args.tolerance
+        if hasattr(args, 'min_distance'): kwargs['min_distance_threshold'] = args.min_distance
         if hasattr(args, 'random_seed') and args.random_seed is not None: kwargs['random_seed'] = args.random_seed
         pipeline.run_complete_workflow(args.target_mw, args.output_dir, getattr(args, 'model_path', None), **kwargs)
 
