@@ -33,14 +33,14 @@ pip install .
 ### Complete Workflow
 ```python
 from mwcalc import MolecularWorkflowPipeline
-
 pipeline = MolecularWorkflowPipeline()
 results = pipeline.run_complete_workflow(
     target_mw=472,
     output_dir="molecules",
     num_mols_per_combo=2000,
     tolerance=0,
-    random_seed=0
+    random_seed=0,
+    min_distance_threshold=0.4  # NEW: Add superposition check parameter
 )
 ```
 
@@ -56,7 +56,8 @@ generate_sin_only_molecules(
     output_dir="molecules",
     num_mols_per_combo=2000,
     tolerance=0,
-    random_seed=0
+    random_seed=0,
+    min_distance_threshold=0.4  # NEW: Add superposition check parameter
 )
 
 # 2. Remove duplicates  
@@ -71,5 +72,5 @@ optimize_folder_xyz("molecules", "esen_sm_conserving_all.pt", fmax=0.02, steps=5
 
 ### Command Line
 ```bash
-mwcalc run --target-mw 472 --output-dir molecules --model-path esen_sm_conserving_all.pt --num-mols 2000 --tolerance 0 --random-seed 0
+mwcalc run --target-mw 472 --output-dir molecules --model-path esen_sm_conserving_all.pt --num-mols 2000 --tolerance 0 --random-seed 0 --min-distance 0.4
 ```
