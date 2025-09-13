@@ -19,6 +19,7 @@ def generate_sin_only_molecules(
     max_estimate_threshold=10000000,
     uncertainty_threshold=1000,
     bond_length_thresholds=None,
+    min_distance_threshold=0.4,  # NEW: minimum distance between any two atoms
     validate_final=True,
     verbose=True,
     random_seed=None
@@ -44,6 +45,8 @@ def generate_sin_only_molecules(
     bond_length_thresholds : dict, optional
         Bond length thresholds for validation (Angstroms)
         Default: {('N', 'N'): 1.4, ('Si', 'Si'): 2.3}
+    min_distance_threshold : float, default=0.4
+        Minimum distance required between any two atoms to avoid superposition (Angstroms)
     validate_final : bool, default=True
         Whether to perform final validation and remove invalid molecules
     verbose : bool, default=True
@@ -62,6 +65,7 @@ def generate_sin_only_molecules(
     ...     output_dir='my_molecules',
     ...     num_mols_per_combo=500,
     ...     tolerance=1.5,
+    ...     min_distance_threshold=0.5,  # Stricter superposition check
     ...     random_seed=42
     ... )
     >>> print(f"Generated {stats['total_molecules']} molecules in {stats['combinations_found']} combinations")
@@ -84,12 +88,12 @@ def generate_sin_only_molecules(
     # Initialize molecular weight dictionary and bonding rules
     mw_dict = {
         'N':   14,
-        'NH':  14+1,
-        'NH2': 14+1*2,
+        'NH':  15,
+        'NH2': 16,
         'Si':  28,
-        'SiH': 28 + 1,
-        'SiH2': 28 + 1*2,
-        'SiH3': 28 + 1*3
+        'SiH': 29,
+        'SiH2': 30,
+        'SiH3': 31
     }
     
     bonds_allowed = {
@@ -124,6 +128,7 @@ def generate_sin_only_molecules(
         print("="*60)
         print(f"Target molecular weight: {target_mw}±{tolerance}")
         print(f"Molecules per combination: {num_mols_per_combo}")
+        print(f"Minimum distance threshold: {min_distance_threshold} Å")
         print(f"Output directory: {output_dir}")
         if random_seed is not None:
             print(f"Random seed: {random_seed}")
@@ -144,7 +149,8 @@ def generate_sin_only_molecules(
             'combinations_found': 0,
             'total_molecules': 0,
             'valid_molecules': 0,
-            'invalid_molecules': 0
+            'invalid_molecules': 0,
+            'superposition_failures': 0
         }
     
     if verbose:
@@ -187,22 +193,26 @@ def generate_sin_only_molecules(
     
     # Generate molecules for each combination
     total_generated = 0
+    total_superposition_failures = 0
+    
     for combo in tqdm(combinations, desc='Processing combinations', disable=not verbose):
         if sum(combo.values()) == 0:
             continue
-        generated = _generate_molecules_for_combo(
+        generated, superposition_failures = _generate_molecules_for_combo(
             combo, num_mols_per_combo, output_dir, max_estimate_threshold, 
             uncertainty_threshold, bonds_allowed, element_map, 
-            si_units, n_units, verbose, random_seed
+            si_units, n_units, min_distance_threshold, verbose, random_seed
         )
         total_generated += generated
+        total_superposition_failures += superposition_failures
     
     # Final validation if requested
     invalid_count = 0
     if validate_final:
         if verbose:
             print("\nPerforming final validation...")
-        invalid_count = _validate_all_generated_molecules(output_dir, bond_length_thresholds, verbose)
+        invalid_count = _validate_all_generated_molecules(output_dir, bond_length_thresholds, 
+                                                        min_distance_threshold, verbose)
     
     # Generate summary statistics
     stats = {
@@ -210,6 +220,7 @@ def generate_sin_only_molecules(
         'total_molecules': total_generated,
         'valid_molecules': total_generated - invalid_count,
         'invalid_molecules': invalid_count,
+        'superposition_failures': total_superposition_failures,
         'output_directory': output_dir,
         'random_seed': random_seed
     }
@@ -221,11 +232,62 @@ def generate_sin_only_molecules(
         print(f"Total molecules generated: {stats['total_molecules']}")
         print(f"Valid molecules: {stats['valid_molecules']}")
         print(f"Invalid molecules removed: {stats['invalid_molecules']}")
+        print(f"Superposition failures during generation: {stats['superposition_failures']}")
         if random_seed is not None:
             print(f"Random seed used: {random_seed}")
         print(f"Results saved in: {output_dir}")
     
     return stats
+
+# NEW FUNCTION: Check for atomic superposition
+def _check_atomic_superposition(mol, min_distance_threshold=0.4):
+    """
+    Check if any two atoms in a molecule are too close to each other (superposed).
+    
+    Parameters:
+    -----------
+    mol : rdkit.Chem.Mol
+        RDKit molecule object with 3D coordinates
+    min_distance_threshold : float, default=0.4
+        Minimum allowed distance between any two atoms (Angstroms)
+    
+    Returns:
+    --------
+    tuple : (is_valid, violations)
+        is_valid : bool
+            True if no atoms are superposed, False otherwise
+        violations : list
+            List of strings describing distance violations
+    """
+    violations = []
+    conformer = mol.GetConformer()
+    num_atoms = mol.GetNumAtoms()
+    
+    # Check all pairwise distances
+    for i in range(num_atoms):
+        pos_i = conformer.GetAtomPosition(i)
+        atom_i = mol.GetAtomWithIdx(i)
+        
+        for j in range(i + 1, num_atoms):
+            pos_j = conformer.GetAtomPosition(j)
+            atom_j = mol.GetAtomWithIdx(j)
+            
+            # Calculate distance
+            distance = np.sqrt(
+                (pos_i.x - pos_j.x)**2 + 
+                (pos_i.y - pos_j.y)**2 + 
+                (pos_i.z - pos_j.z)**2
+            )
+            
+            # Check if distance is below threshold
+            if distance < min_distance_threshold:
+                violations.append(
+                    f"Atoms {i}({atom_i.GetSymbol()}) and {j}({atom_j.GetSymbol()}) "
+                    f"too close: {distance:.3f} Å < {min_distance_threshold} Å"
+                )
+    
+    is_valid = len(violations) == 0
+    return is_valid, violations
 
 # Helper functions (internal implementation using enhanced code 2 logic)
 
@@ -550,9 +612,10 @@ def _validate_molecule_strict_si_n(mol, species_list_flat, si_units, n_units):
 
 def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_threshold, 
                                 uncertainty_threshold, bonds_allowed, element_map, 
-                                si_units, n_units, verbose, random_seed):
+                                si_units, n_units, min_distance_threshold, verbose, random_seed):
     """
     Generate molecules for a given combination using enhanced logic from code 2.
+    Now includes superposition checking.
     """
     
     # Estimate the number of possible molecules using enhanced estimation
@@ -561,7 +624,7 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
     if estimated_molecules == 0:
         if verbose:
             print(f"Skipping combination (no valid structures possible): {combo}")
-        return 0
+        return 0, 0
     
     # Enhanced limiting logic from code 2
     original_num_mols = num_mols
@@ -605,7 +668,7 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
         species_list_flat += [sp] * count
     
     if not species_list_flat:
-        return 0
+        return 0, 0
     
     combo_name = '_'.join(f"{s}{combo[s]}" for s in sorted(combo.keys()) if combo[s] > 0)
     combo_dir = os.path.join(output_dir, f"combo_{combo_name}")
@@ -618,7 +681,7 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
     if total_stubs % 2 != 0:
         if verbose:
             print(f"Skipping {combo_name}: odd sum of stubs ({total_stubs}).")
-        return 0
+        return 0, 0
     
     # CRITICAL: Enforce equal N vs Si stubs for purely bipartite Si-N bonding
     n_stubs = sum(deg for sp, deg in zip(species_list_flat, degrees) if sp in n_units)
@@ -626,7 +689,7 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
     if n_stubs != si_stubs:
         if verbose:
             print(f"Skipping {combo_name}: unmatched N stubs ({n_stubs}) vs Si stubs ({si_stubs}). Si-N only bonding requires equal stub counts.")
-        return 0
+        return 0, 0
 
     # Verify we have both Si and N atoms (can't have Si-N bonds without both)
     has_si = any(sp in si_units for sp in species_list_flat)
@@ -634,11 +697,12 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
     if not (has_si and has_n):
         if verbose:
             print(f"Skipping {combo_name}: missing either Si atoms ({has_si}) or N atoms ({has_n}). Si-N bonding requires both.")
-        return 0
+        return 0, 0
     
     # Generation loop with enhanced logic from code 2
     generated = 0
     attempts = 0
+    superposition_failures = 0  # NEW: Track superposition failures
     max_attempts = num_mols * 200  # Increased for better success rate with larger systems
     generated_smiles = set()
     
@@ -753,7 +817,6 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
             smi = Chem.MolToSmiles(mol)
             if smi in generated_smiles:
                 continue  # Skip duplicate
-            generated_smiles.add(smi)
             
             # CRITICAL VALIDATION: Final check that molecule has ONLY Si-N bonds
             is_valid, invalid_bonds = _validate_molecule_strict_si_n(mol, species_list_flat, si_units, n_units)
@@ -775,7 +838,18 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
             # Optimize geometry
             AllChem.MMFFOptimizeMolecule(mol)
 
-            # SUCCESS: write SMILES + XYZ in its own folder
+            # NEW: Check for atomic superposition after geometry optimization
+            is_not_superposed, superposition_violations = _check_atomic_superposition(mol, min_distance_threshold)
+            if not is_not_superposed:
+                superposition_failures += 1
+                if verbose and superposition_failures % 100 == 0:  # Show occasional warnings
+                    print(f"Superposition detected in {combo_name} (failure #{superposition_failures}):")
+                    for violation in superposition_violations[:3]:  # Show first 3 violations
+                        print(f"  {violation}")
+                continue  # Skip this molecule due to superposition
+
+            # SUCCESS: Add to generated set and write files
+            generated_smiles.add(smi)
             generated += 1
             mol_dir = os.path.join(combo_dir, f"mol_{generated}")
             os.makedirs(mol_dir, exist_ok=True)
@@ -825,6 +899,16 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
                 f.write(f"Valid Si-N bonds: {si_n_bonds}\n")
                 f.write(f"Invalid bonds: {invalid_bonds_found}\n")
                 f.write(f"CONSTRAINT SATISFIED: {invalid_bonds_found == 0}\n")
+                
+                # NEW: Add superposition check results
+                f.write(f"\nSUPERPOSITION CHECK:\n")
+                f.write(f"Minimum distance threshold: {min_distance_threshold} Å\n")
+                if is_not_superposed:
+                    f.write("PASSED: No atoms are superposed\n")
+                else:
+                    f.write("FAILED: Atoms too close detected\n")
+                    for violation in superposition_violations:
+                        f.write(f"  {violation}\n")
             
             # XYZ
             xyz = MolToXYZBlock(mol)
@@ -851,13 +935,14 @@ def _generate_molecules_for_combo(combo, num_mols, output_dir, max_estimate_thre
     if verbose:
         print(f"Generated {generated}/{num_mols} molecules for combo {combo_name} (attempts: {attempts}, unique structures: {actual_unique}, estimated unique possible: {estimated_display})")
         print(f"  CONSTRAINT CHECK: All molecules have ONLY Si-N bonds (no Si-Si or N-N bonds)")
+        print(f"  SUPERPOSITION CHECK: {superposition_failures} molecules rejected due to atoms too close (<{min_distance_threshold} Å)")
         print(f"  UNIQUENESS: Generated {actual_unique} unique SMILES out of estimated {estimated_display} possible unique structures")
     
-    return generated
+    return generated, superposition_failures
 
-def _validate_xyz_file(xyz_file, bond_length_thresholds):
+def _validate_xyz_file(xyz_file, bond_length_thresholds, min_distance_threshold):
     """
-    Validate an XYZ file to check for N-N or Si-Si bonds using enhanced logic from code 2
+    Validate an XYZ file to check for N-N or Si-Si bonds and atomic superposition
     """
     try:
         with open(xyz_file, 'r') as f:
@@ -874,6 +959,7 @@ def _validate_xyz_file(xyz_file, bond_length_thresholds):
         
         # Check distances between heavy atoms using provided thresholds
         invalid_bonds = []
+        superposition_violations = []
         
         for i in range(num_atoms):
             if atoms[i][0] == 'H':
@@ -886,26 +972,44 @@ def _validate_xyz_file(xyz_file, bond_length_thresholds):
                 dist = np.linalg.norm(atoms[i][1] - atoms[j][1])
                 atom_pair = tuple(sorted([atoms[i][0], atoms[j][0]]))
                 
+                # Check for forbidden bonds (Si-Si, N-N)
                 if atom_pair in bond_length_thresholds and dist < bond_length_thresholds[atom_pair]:
                     if atom_pair == ('N', 'N'):
                         invalid_bonds.append(f"N-N bond detected: atoms {i} and {j}, distance: {dist:.3f} Å")
                     elif atom_pair == ('Si', 'Si'):
                         invalid_bonds.append(f"Si-Si bond detected: atoms {i} and {j}, distance: {dist:.3f} Å")
+                
+                # NEW: Check for superposition (any atoms too close)
+                if dist < min_distance_threshold:
+                    superposition_violations.append(
+                        f"Atoms {i}({atoms[i][0]}) and {j}({atoms[j][0]}) too close: {dist:.3f} Å < {min_distance_threshold} Å"
+                    )
         
-        return len(invalid_bonds) == 0, invalid_bonds
+        # Check all atoms, including hydrogen
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
+                dist = np.linalg.norm(atoms[i][1] - atoms[j][1])
+                if dist < min_distance_threshold:
+                    superposition_violations.append(
+                        f"Atoms {i}({atoms[i][0]}) and {j}({atoms[j][0]}) too close: {dist:.3f} Å < {min_distance_threshold} Å"
+                    )
+        
+        all_violations = invalid_bonds + superposition_violations
+        return len(all_violations) == 0, all_violations
     
     except Exception:
         return False, ["File reading error"]
 
-def _validate_all_generated_molecules(output_dir, bond_length_thresholds, verbose):
+def _validate_all_generated_molecules(output_dir, bond_length_thresholds, min_distance_threshold, verbose):
     """
-    Validate all generated XYZ files and remove invalid ones using enhanced logic from code 2
+    Validate all generated XYZ files and remove invalid ones, including superposition check
     """
     if verbose:
         print("\n" + "="*60)
         print("VALIDATING ALL GENERATED MOLECULES")
         print("="*60)
         print(f"Bond length thresholds: {bond_length_thresholds}")
+        print(f"Minimum distance threshold: {min_distance_threshold} Å")
     
     xyz_files = glob.glob(os.path.join(output_dir, '**/mol.xyz'), recursive=True)
     
@@ -922,11 +1026,11 @@ def _validate_all_generated_molecules(output_dir, bond_length_thresholds, verbos
     removed_dirs = []
     
     for xyz_file in tqdm(xyz_files, desc="Validating XYZ files", disable=not verbose):
-        is_valid, invalid_bonds = _validate_xyz_file(xyz_file, bond_length_thresholds)
+        is_valid, violations = _validate_xyz_file(xyz_file, bond_length_thresholds, min_distance_threshold)
         
         if not is_valid:
             invalid_count += 1
-            invalid_files.append((xyz_file, invalid_bonds))
+            invalid_files.append((xyz_file, violations))
             
             # Remove the entire molecule directory
             mol_dir = os.path.dirname(xyz_file)
@@ -962,10 +1066,10 @@ def _validate_all_generated_molecules(output_dir, bond_length_thresholds, verbos
         
         if invalid_count > 0:
             print("\nREMOVED INVALID MOLECULES:")
-            for (xyz_file, invalid_bonds), mol_dir in zip(invalid_files, removed_dirs):
+            for (xyz_file, violations), mol_dir in zip(invalid_files, removed_dirs):
                 print(f"\nRemoved: {mol_dir}")
-                for bond in invalid_bonds:
-                    print(f"  - {bond}")
+                for violation in violations:
+                    print(f"  - {violation}")
     
     # Create validation report
     report_file = os.path.join(output_dir, 'validation_report.txt')
@@ -974,6 +1078,7 @@ def _validate_all_generated_molecules(output_dir, bond_length_thresholds, verbos
         f.write("="*60 + "\n")
         f.write(f"Generated on: {os.popen('date').read().strip()}\n")
         f.write(f"Bond length thresholds: {bond_length_thresholds}\n")
+        f.write(f"Minimum distance threshold: {min_distance_threshold} Å\n")
         f.write(f"Total molecules checked: {len(xyz_files)}\n")
         f.write(f"Valid molecules kept: {len(xyz_files) - invalid_count}\n")
         f.write(f"Invalid molecules removed: {invalid_count}\n")
@@ -981,11 +1086,11 @@ def _validate_all_generated_molecules(output_dir, bond_length_thresholds, verbos
         
         if invalid_count > 0:
             f.write("REMOVED INVALID MOLECULES:\n")
-            for (xyz_file, invalid_bonds), mol_dir in zip(invalid_files, removed_dirs):
+            for (xyz_file, violations), mol_dir in zip(invalid_files, removed_dirs):
                 f.write(f"\nRemoved directory: {mol_dir}\n")
                 f.write(f"Original file: {xyz_file}\n")
-                for bond in invalid_bonds:
-                    f.write(f"  - {bond}\n")
+                for violation in violations:
+                    f.write(f"  - {violation}\n")
         
         if empty_combos:
             f.write("\n\nREMOVED EMPTY COMBO DIRECTORIES:\n")
@@ -1009,10 +1114,11 @@ def _validate_all_generated_molecules(output_dir, bond_length_thresholds, verbos
 if __name__ == '__main__':
 
     stats = generate_sin_only_molecules(
-        target_mw=472,
+        target_mw=489,
         output_dir='test',
         tolerance=0,
         num_mols_per_combo=2000,
+        min_distance_threshold=0.4,  # NEW: Set minimum distance to avoid superposition
         random_seed=0,  # Set random seed for reproducible results
         verbose=True
     )
@@ -1022,5 +1128,6 @@ if __name__ == '__main__':
     print(f"Total molecules: {stats['total_molecules']}")
     print(f"Valid molecules: {stats['valid_molecules']}")
     print(f"Invalid molecules removed: {stats['invalid_molecules']}")
+    print(f"Superposition failures during generation: {stats['superposition_failures']}")
     print(f"Random seed used: {stats['random_seed']}")
     print(f"Results saved in: {stats['output_directory']}")
