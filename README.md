@@ -37,10 +37,11 @@ pipeline = MolecularWorkflowPipeline()
 results = pipeline.run_complete_workflow(
     target_mw=472,
     output_dir="molecules",
+    model_path="esen_sm_conserving_all.pt",  # Add the model path here
     num_mols_per_combo=2000,
     tolerance=0,
     random_seed=0,
-    min_distance_threshold=0.4  # NEW: Add superposition check parameter
+    min_distance_threshold=0.4
 )
 ```
 
